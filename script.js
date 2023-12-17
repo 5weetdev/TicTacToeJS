@@ -44,19 +44,24 @@ function saveScoreToCookie(score) {
 function playSound() {
     var context = new (window.AudioContext || window.webkitAudioContext)();
     var source = context.createBufferSource();
-  
+
     var sound = Math.floor(Math.random() * 5);
 
     // Fetch the sound file
     fetch(`sounds/hit${sound}.mp3`)
-      .then(response => response.arrayBuffer())
-      .then(data => context.decodeAudioData(data))
-      .then(buffer => {
+    .then(response => response.arrayBuffer())
+    .then(data => context.decodeAudioData(data))
+    .then(buffer => {
         source.buffer = buffer;
         source.connect(context.destination);
         source.start(0);
-      })
-      .catch(error => console.error(error));
+
+        // Schedule the source to stop after the buffer duration
+        source.onended = function() {
+        source.stop();
+        };
+    })
+    .catch(error => console.error(error));
   }
 
 function loadScoreFromCookie() {
