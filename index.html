@@ -12,6 +12,7 @@
 
 <body>
     <p style="Text-align: left; font-size: smaller; ">This website uses cookies</p>
+    
 
     <div class="center" style="flex-direction: row;">
         <h2 style="padding-right: 5pt;">Перемог:</h2>
@@ -31,7 +32,7 @@
                 <button class="square-button" />
                 <button class="square-button" />
             </div>
-
+            <button id="auto-button" style="justify-content: center; align-self: center; margin-top: 15pt;">Auto</button>
             <div class="hidden" id="win-div">
                 <h2 id="win-text">You win</h2>
                 <button id="reset-button">Reset</button>
@@ -40,6 +41,17 @@
     </div>
 
     <script src="script.js"></script>
+
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-FGC548QV4T"></script>
+    <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+
+    gtag('config', 'G-FGC548QV4T');
+    </script>
+
 </body>
 
 </html>

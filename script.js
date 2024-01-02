@@ -10,6 +10,7 @@ const elements = document.querySelectorAll(".square-button");
 const winDiv = document.getElementById("win-div");
 const winText = document.getElementById("win-text");
 const resetButton = document.getElementById("reset-button");
+const autoButton = document.getElementById("auto-button");
 const scoreText = document.getElementById("score");
 
 // Players
@@ -45,6 +46,11 @@ class TicTacToe {
         }
     }
 
+    getRandom() {
+        const cells = this.getAvailableCells();
+        return cells[Math.floor(Math.random() * cells.length)];
+    }
+
     isGameOver() {
         return (
             this.winner !== null ||
@@ -54,6 +60,20 @@ class TicTacToe {
 
     isDraw() {
         return this.isGameOver() && this.winner === null;
+    }
+
+    getAvailableCells() {
+        const availableCells = [];
+
+        for (let row = 0; row < this.size; row++) {
+            for (let col = 0; col < this.size; col++) {
+                if (this.board[row][col] === 0) {
+                    availableCells.push([row, col]);
+                }
+            }
+        }
+
+        return availableCells;
     }
 
     checkWinner(row, col) {
@@ -85,167 +105,159 @@ class TicTacToe {
     }
 }
 
-class QAgent {
+class TicTacToeLearner {
     constructor(size = 3) {
-        this.size = size;
-        this.network = new synaptic.Architect.Perceptron(
-            this.size * this.size,
-            9,
-            9,
-            9,
-            9,
-            1
-        );
+        this.currentPlayer = 1;
+
+        this.network = new synaptic.Architect.Perceptron(9, 3, 9);
+
         this.trainer = new synaptic.Trainer(this.network);
-        this.learningRate = 0.1;
-        this.discountFactor = 0.95;
-        // A higher epsilon promotes exploration
-        this.epsilon = 0.6;
+        this.learningRate = 0.5;
+        this.discountFactor = 0.9;
+        this.epsilon = 0.2;
         this.memory = [];
+        this.trainset = [];
+        this.wins = 0;
+        this.looses = 0;
     }
 
-    randomizeWeights() {
-        const layers = this.network.layers;
-        for (let i = 1; i < layers.length; i++) {
-            const neurons = layers[i].neurons();
-            for (let j = 0; j < neurons.length; j++) {
-                const weights = neurons[j].weights;
-                for (let k = 0; k < weights.length; k++) {
-                    weights[k] = Math.random() * 2 - 1;
+    trainNetwork(epoch = 1000) {
+        const game = new TicTacToe(3);
+        for (let index = 0; index < epoch; index++) {
+            while (!game.isGameOver()) {
+                var row;
+                var col;
+                if (game.currentPlayer === this.currentPlayer) {
+                    [row, col] = this.getMoveRowColFromHidden(game);
+                    game.makeMove(row, col);
+                } else {
+                    [row, col] = game.getRandom();
+                    game.makeMove(row, col);
+                }
+
+                if (game.winner !== null && !game.isDraw()) {
+                    const flat = this.flattenBoard(game.board);
+                    const output = Array(9).fill(0);
+                    output[row * 3 + col] =
+                        game.winner === this.currentPlayer ? 1 : -1;
+                    // this.trainset.push({
+                    //     input: flat,
+                    //     output: output
+                    // });
+                    if (game.winner === this.currentPlayer) {
+                        console.log("Win");
+                        this.wins += 1;
+                    } else {
+                        console.log("Lose");
+                        this.looses += 1;
+                    }
+                    console.log(output);
+                    const out = this.network.activate(flat);
+                    console.log(out);
+                    this.network.propagate(this.learningRate, output);
                 }
             }
-        }
-    }
 
-    flattenState(state) {
-        return state.flat();
-    }
+            //this.trainer.train(this.trainset);
 
-    chooseAction(state, log = false) {
-        // Calculate empty cells once at the start
-        const emptyCells = [];
-        for (let i = 0; i < this.size * this.size; i++) {
-            if (state[Math.floor(i / this.size)][i % this.size] === 0) {
-                emptyCells.push(i);
-            }
+            game.reset();
         }
 
-        if (Math.random() < this.epsilon) {
-            // Exploration: choose a random action from empty cells
-            if (emptyCells.length === 0) {
-                // If all cells are occupied, choose a random action
-                return Math.floor(Math.random() * (this.size * this.size));
-            } else {
-                // Choose a random action from empty cells
-                const randomEmptyCell =
-                    emptyCells[Math.floor(Math.random() * emptyCells.length)];
-                return randomEmptyCell;
-            }
-        } else {
-            // Exploitation: choose the action with the highest Q-value
-            const flatState = this.flattenState(state);
-            const actionValues = this.network.activate(flatState);
-
-            if (emptyCells.length === 0) {
-                // If all cells are occupied, choose a random action
-                if (log) {
-                    console.log("Random choosen!");
-                }
-                return Math.floor(Math.random() * (this.size * this.size));
-            } else {
-                // Choose the action with the highest Q-value from empty cells
-                const chosenAction = emptyCells.reduce(
-                    (maxIndex, currentIndex) => {
-                        return actionValues[currentIndex] >
-                            actionValues[maxIndex]
-                            ? currentIndex
-                            : maxIndex;
-                    },
-                    emptyCells[0]
-                );
-                return chosenAction;
-            }
-        }
-    }
-
-    getEmptyCell(state) {
-        const emptyCells = [];
-        for (let i = 0; i < this.size * this.size; i++) {
-            if (state[Math.floor(i / this.size)][i % this.size] === 0) {
-                emptyCells.push(i);
-            }
-        }
-        const randomEmptyCell =
-            emptyCells.length > 0
-                ? emptyCells[Math.floor(Math.random() * emptyCells.length)]
-                : -1;
-        return randomEmptyCell;
-    }
-
-    remember(state, action, reward, nextState) {
-        const flatState = this.flattenState(state);
-        const flatNextState = this.flattenState(nextState);
-        this.memory.push({ flatState, action, reward, flatNextState });
+        console.log("Wins: ", this.wins);
+        console.log("Looses: ", this.looses);
     }
 
     train() {
         for (let i = 0; i < this.memory.length; i++) {
-            const { flatState, action, reward, flatNextState } = this.memory[i];
-            const inputArray = flatState.concat(
-                action / (this.size * this.size)
-            );
-            const target = [
+            const { state, action, reward, nextState } = this.memory[i];
+            const flatState = state;
+            const flatNextState = nextState;
+
+            // Q-learning update rule
+            const target =
                 reward +
-                    this.discountFactor *
-                        Math.max(...this.network.activate(flatNextState)),
-            ];
-            this.network.propagate(this.learningRate, target, inputArray);
+                this.discountFactor *
+                    Math.max(...this.network.activate(flatNextState));
+            this.network.activate(flatState);
+            this.network.propagate(this.learningRate, [target]);
         }
+
+        // Clear the memory after training
         this.memory = [];
     }
 
-    calculateError() {
-        let totalError = 0;
-    
-        for (let i = 0; i < this.memory.length; i++) {
-            const { flatState, action, reward, flatNextState } = this.memory[i];
-    
-            // Ensure the flattened state and action are correct
-            if (!flatState || flatState.length !== this.size * this.size) {
-                console.error('Invalid flattened state:', flatState);
-                continue;
+    trainQ(epochs = 100) {
+        const ticTacToeGame = new TicTacToe();
+        for (let epoch = 0; epoch < epochs; epoch++) {
+            while (!ticTacToeGame.isGameOver()) {
+                const prevState = this.flattenBoard(ticTacToeGame.board);
+                var row;
+                var col;
+                if (ticTacToeGame.currentPlayer === this.currentPlayer) {
+                    [row, col] = this.getMoveRowColFromHidden(ticTacToeGame);
+                    if (!ticTacToeGame.makeMove(row, col)) {
+                        [row, col] = game.getRandom();
+                        game.makeMove(row, col);
+                    }
+                } else {
+                    [row, col] = game.getRandom();
+                    game.makeMove(row, col);
+                }
+
+                const reward = ticTacToeGame.isGameOver()
+                    ? ticTacToeGame.winner === this.currentPlayer
+                        ? 1
+                        : -1
+                    : 0;
+                const nextState = this.flattenBoard(ticTacToeGame.board);
+
+                this.remember(prevState, [row, col], reward, nextState);
             }
-    
-            const inputArray = flatState.concat(action / (this.size * this.size));
-    
-            // Ensure the input array has the correct length
-            if (inputArray.length !== this.size * this.size + 1) {
-                console.error('Invalid input array:', inputArray);
-                continue;
-            }
-    
-            const target = [
-                reward +
-                this.discountFactor *
-                Math.max(...this.network.activate(flatNextState)),
-            ];
-    
-            // Ensure the target array has the correct length
-            if (target.length !== 1) {
-                console.error('Invalid target array:', target);
-                continue;
-            }
-    
-            const predictedQValue = this.network.activate(inputArray)[0];
-            const error = Math.pow(target[0] - predictedQValue, 2);
-            totalError += error;
+
+            this.train();
+            ticTacToeGame.reset();
         }
-    
-        // Check if there is no training data to avoid division by zero
-        const meanSquaredError = this.memory.length > 0 ? totalError / this.memory.length : 0;
-        return meanSquaredError;
     }
-    
+
+    remember(state, action, reward, nextState) {
+        this.memory.push({ state, action, reward, nextState });
+    }
+
+    flattenBoard(board) {
+        return board.reduce((acc, row) => acc.concat(row), []);
+    }
+
+    getMoveRowColFromHidden(game) {
+        if (Math.random() < this.epsilon) {
+            console.log("random choosen to discover!");
+            return game.getRandom();
+        }
+
+        const input = this.flattenBoard(game.board);
+        //const output = this.network.activate(input);
+        //console.log(input);
+        //this.network.layers.hidden[this.network.layers.hidden.length - 1].propagate(1, [1, 0, 0, 0, 0, 0, 0, 0, 0]);
+
+        //this.network.layers.input.activate(input);
+        //this.network.layers.hidden[this.network.layers.hidden.length - 2].activate();
+        //var preLastLayer = this.network.layers.hidden[this.network.layers.hidden.length - 1].activate();
+        var preLastLayer = this.network.activate(input);
+        //console.log(preLastLayer);
+
+        let maxOutput = Number.NEGATIVE_INFINITY;
+        let selectedMove = [0, 0];
+
+        for (let index = 0; index < preLastLayer.length; index++) {
+            const row = index % game.size;
+            const col = Math.floor(index / game.size);
+            if (game.board[row][col] === 0 && preLastLayer[index] > maxOutput) {
+                maxOutput = preLastLayer[index];
+                selectedMove = [row, col];
+            }
+        }
+
+        return selectedMove;
+    }
 }
 
 function getCookieExpiration() {
@@ -304,95 +316,12 @@ function loadScoreFromCookie() {
     return 0;
 }
 
-function trainNetwork(qAgent, epochs = 100) {
-    var ticTacToeGame = new TicTacToe();
-    for (let epoch = 0; epoch < epochs; epoch++) {
-        let agentWins = 0;
-        let opponentWins = 0;
-
-        while (!ticTacToeGame.isGameOver()) {
-            // Agent's move
-            const agentAction = qAgent.chooseAction(ticTacToeGame.board);
-            const agentPrevState = JSON.parse(
-                JSON.stringify(ticTacToeGame.board)
-            );
-
-            const agentRow = Math.floor(agentAction / ticTacToeGame.size);
-            const agentCol = agentAction % ticTacToeGame.size;
-
-            if (!ticTacToeGame.makeMove(agentRow, agentCol)) {
-                // If the move is invalid, skip the rest of the loop
-                continue;
-            }
-
-            // Check for game over after agent's move
-            if (ticTacToeGame.isGameOver()) {
-                if (ticTacToeGame.winner === qAgent.currentPlayer) {
-                    agentWins++;
-                } else if (ticTacToeGame.winner !== null) {
-                    opponentWins++;
-                }
-                break; // Exit the loop if the game is over
-            }
-
-            // Opponent's move
-            const opponentAction = qAgent.getEmptyCell(ticTacToeGame.board);
-            if (opponentAction >= 0) {
-                const opponentRow = Math.floor(
-                    opponentAction / ticTacToeGame.size
-                );
-                const opponentCol = opponentAction % ticTacToeGame.size;
-                ticTacToeGame.makeMove(opponentRow, opponentCol);
-
-                // Check for game over after opponent's move
-                if (ticTacToeGame.isGameOver()) {
-                    if (ticTacToeGame.winner === qAgent.currentPlayer) {
-                        agentWins++;
-                    } else if (ticTacToeGame.winner !== null) {
-                        opponentWins++;
-                    }
-                }
-
-                // Remember both agent and opponent moves
-                const agentReward = ticTacToeGame.isGameOver()
-                    ? ticTacToeGame.winner === qAgent.currentPlayer
-                        ? 1
-                        : -1
-                    : 0;
-
-                const agentNextState = JSON.parse(
-                    JSON.stringify(ticTacToeGame.board)
-                );
-
-                qAgent.remember(
-                    agentPrevState,
-                    agentAction,
-                    agentReward,
-                    agentNextState
-                );
-            }
-        }
-
-        ticTacToeGame.reset(); // Reset the game for the next epoch
-        qAgent.train();
-
-        // Print win rate
-        const totalGames = agentWins + opponentWins;
-        const winRate = totalGames > 0 ? (agentWins / totalGames) * 100 : 0;
-        console.log(`Epoch ${epoch + 1} - Win Rate: ${winRate.toFixed(2)}%`);
-
-        const meanSquaredError = qAgent.calculateError();
-        console.log('Mean Squared Error:', meanSquaredError);
-    }
-    console.log("Trained for ", epochs);
-}
-
 function ComputerTurn() {
     if (game.isGameOver()) return;
 
-    const action = qAgent.chooseAction(game.board, true);
-    const index = Math.floor(action);
-    
+    const [row, col] = qAgent.getMoveRowColFromHidden(game);
+    const index = row * game.size + col;
+
     CompleteTurn(index);
 
     elements[index].classList.add("o-button");
@@ -434,13 +363,40 @@ function ResetGame() {
     winDiv.classList.add("hidden");
 }
 
-function CompleteTurn(index) {
+var prestate;
+function CompleteTurn(index, sound = true) {
     const col = Math.floor(index / game.size);
     const row = index % game.size;
 
+    const flat = qAgent.flattenBoard(game.board);
+    if (game.currentPlayer === PLAYER_O) {
+        prestate = qAgent.flattenBoard(game.board);
+    }
+
     game.makeMove(col, row);
 
-    playSound();
+    if (game.isGameOver() && !game.isDraw()) {
+        const output = Array(9).fill(0);
+
+        output[row * 3 + col] = 1;
+        qAgent.trainset.push({
+            input: game.winner === PLAYER_O ? prestate : flat,
+            output: output,
+        });
+        var error = qAgent.trainer.train(qAgent.trainset, {
+            rate: 0.8,
+            iterations: 1000,
+            error: 0.005,
+            shuffle: true,
+            log: 1000,
+            cost: synaptic.Trainer.cost.CROSS_ENTROPY,
+        });
+        console.log(error);
+    }
+
+    if (sound) {
+        playSound();
+    }
 }
 
 // Load score from cookie
@@ -449,21 +405,54 @@ scoreText.textContent = score;
 
 // Tic tac toe game
 const game = new TicTacToe();
-const qAgent = new QAgent();
-qAgent.randomizeWeights();
+const qAgent = new TicTacToeLearner();
 
 // Reset the game button click event
 resetButton.addEventListener("click", function () {
     ResetGame();
 });
 
-trainNetwork(qAgent, 100);
+autoButton.addEventListener("click", function () {
+    if (game.isGameOver()) {
+        ResetGame();
+    }
+
+    while (!game.isGameOver()) {
+        if (game.currentPlayer === PLAYER_O && !game.isGameOver()) {
+            var col;
+            var row;
+
+            // X
+            [row, col] = qAgent.getMoveRowColFromHidden(game);
+            var index = row * game.size + col;
+
+            CompleteTurn(index, false);
+
+            elements[index].classList.add("x-button");
+
+            CheckForGameOver();
+
+            // O
+            [row, col] = qAgent.getMoveRowColFromHidden(game);
+            index = row * game.size + col;
+
+            CompleteTurn(index, false);
+
+            elements[index].classList.add("o-button");
+
+            CheckForGameOver();
+        }
+    }
+});
+
+//qAgent.trainNetwork();
+//qAgent.trainQ();
 
 for (let i = 0; i < elements.length; i++) {
     const item = elements[i];
     item.addEventListener("click", function () {
         if (
-            game.currentPlayer === 1 &&
+            game.currentPlayer === PLAYER_O &&
             game.board[Math.floor(i / 3)][i % 3] === 0 &&
             !game.isGameOver()
         ) {
