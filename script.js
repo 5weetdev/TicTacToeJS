@@ -105,161 +105,6 @@ class TicTacToe {
     }
 }
 
-class TicTacToeLearner {
-    constructor(size = 3) {
-        this.currentPlayer = 1;
-
-        this.network = new synaptic.Architect.Perceptron(9, 3, 9);
-
-        this.trainer = new synaptic.Trainer(this.network);
-        this.learningRate = 0.5;
-        this.discountFactor = 0.9;
-        this.epsilon = 0.2;
-        this.memory = [];
-        this.trainset = [];
-        this.wins = 0;
-        this.looses = 0;
-    }
-
-    trainNetwork(epoch = 1000) {
-        const game = new TicTacToe(3);
-        for (let index = 0; index < epoch; index++) {
-            while (!game.isGameOver()) {
-                var row;
-                var col;
-                if (game.currentPlayer === this.currentPlayer) {
-                    [row, col] = this.getMoveRowColFromHidden(game);
-                    game.makeMove(row, col);
-                } else {
-                    [row, col] = game.getRandom();
-                    game.makeMove(row, col);
-                }
-
-                if (game.winner !== null && !game.isDraw()) {
-                    const flat = this.flattenBoard(game.board);
-                    const output = Array(9).fill(0);
-                    output[row * 3 + col] =
-                        game.winner === this.currentPlayer ? 1 : -1;
-                    // this.trainset.push({
-                    //     input: flat,
-                    //     output: output
-                    // });
-                    if (game.winner === this.currentPlayer) {
-                        console.log("Win");
-                        this.wins += 1;
-                    } else {
-                        console.log("Lose");
-                        this.looses += 1;
-                    }
-                    console.log(output);
-                    const out = this.network.activate(flat);
-                    console.log(out);
-                    this.network.propagate(this.learningRate, output);
-                }
-            }
-
-            //this.trainer.train(this.trainset);
-
-            game.reset();
-        }
-
-        console.log("Wins: ", this.wins);
-        console.log("Looses: ", this.looses);
-    }
-
-    train() {
-        for (let i = 0; i < this.memory.length; i++) {
-            const { state, action, reward, nextState } = this.memory[i];
-            const flatState = state;
-            const flatNextState = nextState;
-
-            // Q-learning update rule
-            const target =
-                reward +
-                this.discountFactor *
-                    Math.max(...this.network.activate(flatNextState));
-            this.network.activate(flatState);
-            this.network.propagate(this.learningRate, [target]);
-        }
-
-        // Clear the memory after training
-        this.memory = [];
-    }
-
-    trainQ(epochs = 100) {
-        const ticTacToeGame = new TicTacToe();
-        for (let epoch = 0; epoch < epochs; epoch++) {
-            while (!ticTacToeGame.isGameOver()) {
-                const prevState = this.flattenBoard(ticTacToeGame.board);
-                var row;
-                var col;
-                if (ticTacToeGame.currentPlayer === this.currentPlayer) {
-                    [row, col] = this.getMoveRowColFromHidden(ticTacToeGame);
-                    if (!ticTacToeGame.makeMove(row, col)) {
-                        [row, col] = game.getRandom();
-                        game.makeMove(row, col);
-                    }
-                } else {
-                    [row, col] = game.getRandom();
-                    game.makeMove(row, col);
-                }
-
-                const reward = ticTacToeGame.isGameOver()
-                    ? ticTacToeGame.winner === this.currentPlayer
-                        ? 1
-                        : -1
-                    : 0;
-                const nextState = this.flattenBoard(ticTacToeGame.board);
-
-                this.remember(prevState, [row, col], reward, nextState);
-            }
-
-            this.train();
-            ticTacToeGame.reset();
-        }
-    }
-
-    remember(state, action, reward, nextState) {
-        this.memory.push({ state, action, reward, nextState });
-    }
-
-    flattenBoard(board) {
-        return board.reduce((acc, row) => acc.concat(row), []);
-    }
-
-    getMoveRowColFromHidden(game) {
-        if (Math.random() < this.epsilon) {
-            console.log("random choosen to discover!");
-            return game.getRandom();
-        }
-
-        const input = this.flattenBoard(game.board);
-        //const output = this.network.activate(input);
-        //console.log(input);
-        //this.network.layers.hidden[this.network.layers.hidden.length - 1].propagate(1, [1, 0, 0, 0, 0, 0, 0, 0, 0]);
-
-        //this.network.layers.input.activate(input);
-        //this.network.layers.hidden[this.network.layers.hidden.length - 2].activate();
-        //var preLastLayer = this.network.layers.hidden[this.network.layers.hidden.length - 1].activate();
-        var preLastLayer = this.network.activate(input);
-        //console.log(preLastLayer);
-
-        let maxOutput = Number.NEGATIVE_INFINITY;
-        let selectedMove = [0, 0];
-
-        for (let index = 0; index < preLastLayer.length; index++) {
-            const row = index % game.size;
-            const col = Math.floor(index / game.size);
-            if (game.board[row][col] === 0 && preLastLayer[index] > maxOutput) {
-                maxOutput = preLastLayer[index];
-                selectedMove = [row, col];
-            }
-        }
-
-        return selectedMove;
-    }
-}
-
 function getCookieExpiration() {
     const expirationDate = new Date();
 
@@ -319,7 +164,9 @@ function loadScoreFromCookie() {
 function ComputerTurn() {
     if (game.isGameOver()) return;
 
-    const [row, col] = qAgent.getMoveRowColFromHidden(game);
+    const [row, col] = game.getRandom();
+    //let arr = game.getAvailableCells();
+    //const [row, col] = arr[Math.floor(Math.random() * arr.length)]
     const index = row * game.size + col;
 
     CompleteTurn(index);
@@ -363,36 +210,11 @@ function ResetGame() {
     winDiv.classList.add("hidden");
 }
 
-var prestate;
 function CompleteTurn(index, sound = true) {
     const col = Math.floor(index / game.size);
     const row = index % game.size;
 
-    const flat = qAgent.flattenBoard(game.board);
-    if (game.currentPlayer === PLAYER_O) {
-        prestate = qAgent.flattenBoard(game.board);
-    }
-
     game.makeMove(col, row);
-
-    if (game.isGameOver() && !game.isDraw()) {
-        const output = Array(9).fill(0);
-
-        output[row * 3 + col] = 1;
-        qAgent.trainset.push({
-            input: game.winner === PLAYER_O ? prestate : flat,
-            output: output,
-        });
-        var error = qAgent.trainer.train(qAgent.trainset, {
-            rate: 0.8,
-            iterations: 1000,
-            error: 0.005,
-            shuffle: true,
-            log: 1000,
-            cost: synaptic.Trainer.cost.CROSS_ENTROPY,
-        });
-        console.log(error);
-    }
 
     if (sound) {
         playSound();
@@ -405,7 +227,6 @@ scoreText.textContent = score;
 
 // Tic tac toe game
 const game = new TicTacToe();
-const qAgent = new TicTacToeLearner();
 
 // Reset the game button click event
 resetButton.addEventListener("click", function () {
@@ -417,13 +238,14 @@ autoButton.addEventListener("click", function () {
         ResetGame();
     }
 
+    var timeout = 0;
     while (!game.isGameOver()) {
         if (game.currentPlayer === PLAYER_O && !game.isGameOver()) {
             var col;
             var row;
 
             // X
-            [row, col] = qAgent.getMoveRowColFromHidden(game);
+            [row, col] = game.getRandom();
             var index = row * game.size + col;
 
             CompleteTurn(index, false);
@@ -433,7 +255,7 @@ autoButton.addEventListener("click", function () {
             CheckForGameOver();
 
             // O
-            [row, col] = qAgent.getMoveRowColFromHidden(game);
+            [row, col] = game.getRandom();
             index = row * game.size + col;
 
             CompleteTurn(index, false);
@@ -441,12 +263,20 @@ autoButton.addEventListener("click", function () {
             elements[index].classList.add("o-button");
 
             CheckForGameOver();
+
+            timeout++;
+            if(timeout > 5000){
+                console.log("Timeout!");
+                break;
+            }
+        }
+        else
+        {
+            break;
         }
     }
 });
 
-//qAgent.trainNetwork();
-//qAgent.trainQ();
 
 for (let i = 0; i < elements.length; i++) {
     const item = elements[i];
